@@ -2,10 +2,148 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="refresh" content="0; url=login.html">
-    <title>AI Chat by Rafi</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - RFChat</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #0a0a0f; color: #e2e8f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .box { width: 100%; max-width: 400px; }
+        .logo { text-align: center; margin-bottom: 32px; }
+        .logo-icon { width: 80px; height: 80px; background: linear-gradient(135deg, #25d366, #128c7e); border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 40px; margin: 0 auto 16px; }
+        .logo h1 { font-size: 28px; font-weight: 700; }
+        .logo p { color: #71717a; font-size: 14px; margin-top: 4px; }
+        .card { background: #12121a; border: 1px solid #27273a; border-radius: 16px; padding: 32px; }
+        .card h2 { font-size: 20px; margin-bottom: 24px; text-align: center; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 8px; color: #a1a1aa; }
+        input { width: 100%; padding: 14px 16px; background: #0a0a0f; border: 1px solid #27273a; border-radius: 12px; color: #e2e8f0; font-size: 15px; outline: none; }
+        input:focus { border-color: #25d366; }
+        .btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #25d366, #128c7e); border: none; border-radius: 12px; color: white; font-size: 16px; font-weight: 600; cursor: pointer; }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .alert { padding: 12px; border-radius: 10px; font-size: 13px; margin-bottom: 16px; display: none; }
+        .alert-error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; display: block; }
+        .alert-success { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: #22c55e; display: block; }
+        .owner-badge { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-block; margin-bottom: 16px; }
+    </style>
 </head>
 <body>
-    <p>Redirecting...</p>
+    <div class="box">
+        <div class="logo">
+            <div class="logo-icon">💬</div>
+            <h1>RFChat</h1>
+            <p>Chat komunitas & pribadi</p>
+        </div>
+        
+        <div class="card" id="loginCard">
+            <h2>Masuk</h2>
+            <div class="alert" id="alertBox"></div>
+            
+            <div class="form-group">
+                <label>Nomor WhatsApp</label>
+                <input type="tel" id="phoneInput" placeholder="6281234567890" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>Nama</label>
+                <input type="text" id="nameInput" placeholder="Nama kamu" autocomplete="off">
+            </div>
+            <button class="btn" onclick="doLogin()" id="loginBtn">Masuk</button>
+            
+            <div style="text-align:center; margin-top:16px; font-size:12px; color:#71717a;">
+                <span class="owner-badge">👑 Owner</span> langsung masuk tanpa registrasi
+            </div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="app.js"></script>
+    
+    <script>
+        initFirebase();
+        
+        // Auto redirect kalau sudah login
+        if (getCurrentUser()) {
+            window.location.href = 'chat.html';
+        }
+        
+        function doLogin() {
+            const phone = document.getElementById('phoneInput').value.trim();
+            const name = document.getElementById('nameInput').value.trim();
+            const alert = document.getElementById('alertBox');
+            const btn = document.getElementById('loginBtn');
+            
+            if (!phone || !name) {
+                showAlert('Nomor dan nama harus diisi!');
+                return;
+            }
+            
+            const cleanPhone = phone.replace(/\D/g, '');
+            
+            // Check owner
+            if (cleanPhone === CONFIG.OWNER_NUMBER.replace(/\D/g, '')) {
+                // Owner langsung masuk
+                const ownerData = {
+                    uid: 'owner_' + cleanPhone,
+                    phone: cleanPhone,
+                    name: CONFIG.OWNER_NAME,
+                    isOwner: true,
+                    loginAt: new Date().toISOString()
+                };
+                setCurrentUser(ownerData);
+                window.location.href = 'chat.html';
+                return;
+            }
+            
+            btn.disabled = true;
+            btn.textContent = 'Memuat...';
+            
+            // Cek user di database
+            db().ref('users/' + cleanPhone).once('value').then(snap => {
+                if (snap.exists()) {
+                    // User ada, update login
+                    const userData = snap.val();
+                    setCurrentUser({
+                        uid: cleanPhone,
+                        phone: cleanPhone,
+                        name: userData.name || name,
+                        isOwner: false,
+                        loginAt: new Date().toISOString()
+                    });
+                } else {
+                    // User baru
+                    const userData = {
+                        uid: cleanPhone,
+                        phone: cleanPhone,
+                        name: name,
+                        status: 'online',
+                        createdAt: firebase.database.ServerValue.TIMESTAMP,
+                        lastSeen: firebase.database.ServerValue.TIMESTAMP
+                    };
+                    db().ref('users/' + cleanPhone).set(userData);
+                    setCurrentUser({
+                        uid: cleanPhone,
+                        phone: cleanPhone,
+                        name: name,
+                        isOwner: false,
+                        loginAt: new Date().toISOString()
+                    });
+                }
+                
+                window.location.href = 'chat.html';
+            }).catch(err => {
+                showAlert('Error: ' + err.message);
+                btn.disabled = false;
+                btn.textContent = 'Masuk';
+            });
+        }
+        
+        function showAlert(msg) {
+            const box = document.getElementById('alertBox');
+            box.textContent = msg;
+            box.className = 'alert alert-error';
+        }
+    </script>
 </body>
 </html>

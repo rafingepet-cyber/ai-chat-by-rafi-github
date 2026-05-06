@@ -1,64 +1,248 @@
 // =====================
-// Rafi AI - Core Functions
+// RFChat - Core App
 // =====================
 
-const GROQ_API_KEY = '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';
-const API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const CONFIG = {
+    APP_NAME: 'RFChat',
+    OWNER_NUMBER: '625776263259',
+    OWNER_NAME: 'Rafi (Owner)',
+    PRIMARY_COLOR: '#25d366',
+    SECONDARY_COLOR: '#128c7e'
+};
 
-// USER FUNCTIONS
-function getUsers() {
-    try {
-        const data = localStorage.getItem('rafi_users');
-        return data ? JSON.parse(data) : [];
-    } catch(e) {
-        return [];
-    }
+// Firebase Config - GANTI DENGAN CONFIG KAMU!
+const FIREBASE_CONFIG = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "chatstar-ec9bd.firebaseapp.com",
+    databaseURL: "https://chatstar-ec9bd-default-rtdb.firebaseio.com",
+    projectId: "chatstar-ec9bd",
+    storageBucket: "chatstar-ec9bd.appspot.com",
+    messagingSenderId: "221969583189",
+    appId: "1:221969583189:web:abcdef123456"
+};
+
+// Inisialisasi Firebase
+let firebaseApp, db, auth;
+let currentUser = null;
+let currentChat = null;
+let messagesRef = null;
+let typingTimeout = null;
+
+function initFirebase() {
+    firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    auth = firebase.auth();
 }
 
-function saveUsers(users) {
-    localStorage.setItem('rafi_users', JSON.stringify(users));
-}
-
+// ===== USER MANAGEMENT =====
 function getCurrentUser() {
-    try {
-        const data = localStorage.getItem('rafi_current_user');
-        return data ? JSON.parse(data) : null;
-    } catch(e) {
-        return null;
-    }
+    const saved = localStorage.getItem('rfchat_user');
+    return saved ? JSON.parse(saved) : null;
 }
 
-function saveCurrentUser(user) {
-    localStorage.setItem('rafi_current_user', JSON.stringify(user));
+function setCurrentUser(user) {
+    localStorage.setItem('rfchat_user', JSON.stringify(user));
+    currentUser = user;
 }
 
-// CHAT FUNCTIONS
-function getChatKey() {
+function isOwner() {
     const user = getCurrentUser();
-    return 'rafi_chats_' + (user ? user.id : 'guest');
+    return user && user.phone === CONFIG.OWNER_NUMBER;
 }
 
-function getAllChats() {
-    try {
-        const data = localStorage.getItem(getChatKey());
-        return data ? JSON.parse(data) : [];
-    } catch(e) {
-        return [];
+// ===== AUTH =====
+function checkAuth() {
+    const user = getCurrentUser();
+    if (!user) {
+        window.location.href = 'index.html';
+        return false;
     }
+    currentUser = user;
+    return true;
 }
 
-function saveAllChats(chats) {
-    localStorage.setItem(getChatKey(), JSON.stringify(chats));
+function logout() {
+    localStorage.removeItem('rfchat_user');
+    if (db && currentUser) {
+        db.ref('users/' + currentUser.uid + '/status').set('offline');
+    }
+    window.location.href = 'index.html';
 }
 
-// UTILITIES
+// ===== ONLINE STATUS =====
+function setOnline() {
+    if (!db || !currentUser) return;
+    
+    const userRef = db.ref('users/' + currentUser.uid);
+    userRef.update({
+        status: 'online',
+        lastSeen: firebase.database.ServerValue.TIMESTAMP,
+        name: currentUser.name,
+        phone: currentUser.phone
+    });
+    
+    userRef.child('status').onDisconnect().set('offline');
+}
+
+// ===== CHAT FUNCTIONS =====
+function getChatId(user1, user2) {
+    return [user1, user2].sort().join('_');
+}
+
+function createPrivateChat(phone, name) {
+    const chatId = getChatId(currentUser.uid, phone.replace(/\D/g, ''));
+    
+    // Buat chat untuk current user
+    db.ref('userChats/' + currentUser.uid + '/' + chatId).set({
+        name: name || phone,
+        type: 'private',
+        partner: phone.replace(/\D/g, ''),
+        lastMsg: '',
+        lastTime: '',
+        unread: 0,
+        createdAt: firebase.database.ServerValue.TIMESTAMP
+    });
+    
+    // Buat chat untuk partner
+    db.ref('userChats/' + phone.replace(/\D/g, '') + '/' + chatId).set({
+        name: currentUser.name,
+        type: 'private',
+        partner: currentUser.uid,
+        lastMsg: '',
+        lastTime: '',
+        unread: 0,
+        createdAt: firebase.database.ServerValue.TIMESTAMP
+    });
+    
+    return chatId;
+}
+
+function createGroup(name) {
+    const groupId = 'group_' + Date.now();
+    
+    db.ref('groups/' + groupId).set({
+        name: name,
+        createdBy: currentUser.uid,
+        createdAt: firebase.database.ServerValue.TIMESTAMP,
+        members: {
+            [currentUser.uid]: {
+                role: 'admin',
+                joinedAt: firebase.database.ServerValue.TIMESTAMP
+            }
+        }
+    });
+    
+    db.ref('userChats/' + currentUser.uid + '/' + groupId).set({
+        name: name,
+        type: 'group',
+        lastMsg: 'Grup dibuat',
+        lastTime: new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}),
+        unread: 0,
+        createdAt: firebase.database.ServerValue.TIMESTAMP
+    });
+    
+    return groupId;
+}
+
+// ===== MESSAGE FUNCTIONS =====
+function sendMessage(chatId, text, type = 'text') {
+    if (!db || !chatId || !text.trim()) return Promise.reject('Invalid');
+    
+    const msgData = {
+        text: text.trim(),
+        sender: currentUser.uid,
+        senderName: currentUser.name,
+        senderPhone: currentUser.phone,
+        type: type,
+        time: firebase.database.ServerValue.TIMESTAMP,
+        read: false,
+        readBy: {
+            [currentUser.uid]: true
+        }
+    };
+    
+    const msgRef = db.ref('messages/' + chatId).push();
+    
+    return msgRef.set(msgData).then(() => {
+        // Update last message
+        db.ref('userChats/' + currentUser.uid + '/' + chatId).update({
+            lastMsg: text.trim(),
+            lastTime: new Date().toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})
+        });
+        
+        // Update unread untuk partner
+        if (!currentChat || currentChat.id !== chatId) {
+            db.ref('userChats').orderByKey().equalTo(chatId).once('value', snap => {
+                snap.forEach(child => {
+                    const partner = child.key;
+                    if (partner !== currentUser.uid) {
+                        db.ref('userChats/' + partner + '/' + chatId + '/unread').transaction(val => (val || 0) + 1);
+                    }
+                });
+            });
+        }
+        
+        return msgRef.key;
+    });
+}
+
+function markAsRead(chatId) {
+    if (!db) return;
+    
+    db.ref('messages/' + chatId).orderByChild('read').equalTo(false).once('value', snap => {
+        snap.forEach(child => {
+            const msg = child.val();
+            if (msg.sender !== currentUser.uid) {
+                child.ref.update({
+                    read: true,
+                    readBy: { ...msg.readBy, [currentUser.uid]: true }
+                });
+            }
+        });
+    });
+    
+    // Reset unread count
+    db.ref('userChats/' + currentUser.uid + '/' + chatId + '/unread').set(0);
+}
+
+// ===== BROADCAST (OWNER ONLY) =====
+function broadcastMessage(text) {
+    if (!isOwner()) return Promise.reject('Bukan owner!');
+    
+    return db.ref('users').once('value').then(snap => {
+        const promises = [];
+        snap.forEach(child => {
+            const userId = child.key;
+            if (userId !== currentUser.uid) {
+                const chatId = getChatId(currentUser.uid, userId);
+                promises.push(sendMessage(chatId, '[📢 Broadcast] ' + text, 'broadcast'));
+            }
+        });
+        return Promise.all(promises);
+    });
+}
+
+// ===== UTILS =====
 function genId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
 }
 
-function genTitle(text) {
-    const clean = text.replace(/[#*`]/g, '').trim();
-    return clean.length > 25 ? clean.substring(0, 25) + '...' : clean || 'Chat Baru';
+function formatTime(timestamp) {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+}
+
+function formatDate(timestamp) {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    if (date.toDateString() === today.toDateString()) return 'Hari ini';
+    if (date.toDateString() === yesterday.toDateString()) return 'Kemarin';
+    return date.toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'});
 }
 
 function escapeHtml(text) {
@@ -67,68 +251,44 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function formatMessage(content) {
-    let html = escapeHtml(content);
-    // Code blocks
-    html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
-        return '<pre><code>' + code.trim() + '</code></pre>';
-    });
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    // Bold
-    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    // Italic
-    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    // Line breaks
-    html = html.replace(/\n/g, '<br>');
-    return html;
+// ===== TYPING INDICATOR =====
+function setTyping(chatId, isTyping) {
+    if (!db || !chatId) return;
+    db.ref('typing/' + chatId + '/' + currentUser.uid).set(isTyping ? true : null);
 }
 
-// AI API
-async function askAI(messages) {
-    const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-            'Authorization': 'Bearer ' + GROQ_API_KEY,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: [
-                {
-                    role: 'system',
-                    content: 'Kamu adalah AI Chat Assistant bernama "Rafi AI". Kamu pintar, ramah, dan profesional.\n\nKemampuan:\n1. Ngobrol & Chat - Bisa diajak ngobrol santai, diskusi, tanya jawab\n2. Coding & Programming - Bikin kode JS, Python, PHP, React, dll. Kode harus clean dan well-commented\n3. Problem Solving - Bantu debug error, jelaskan konsep\n\nRules:\n- Jawab dalam Bahasa Indonesia kecuali diminta bahasa lain\n- Untuk kode, pakai markdown code block\n- Jelaskan kode dengan detail\n- Selalu ramah dan helpful'
-                },
-                ...messages.map(m => ({
-                    role: m.role === 'ai' ? 'assistant' : m.role,
-                    content: m.content
-                }))
-            ],
-            temperature: 0.7,
-            max_tokens: 4096
-        })
+function listenTyping(chatId, callback) {
+    if (!db || !chatId) return;
+    db.ref('typing/' + chatId).on('value', snap => {
+        const typers = [];
+        snap.forEach(child => {
+            if (child.key !== currentUser.uid && child.val()) {
+                typers.push(child.key);
+            }
+        });
+        callback(typers.length > 0);
     });
-
-    if (!response.ok) {
-        throw new Error('Gagal response dari AI');
-    }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || 'Maaf, saya tidak bisa memproses.';
 }
 
-// Export semua fungsi ke window biar bisa dipake di HTML
-window.GROQ_API_KEY = GROQ_API_KEY;
-window.API_URL = API_URL;
-window.getUsers = getUsers;
-window.saveUsers = saveUsers;
+// Export
+window.CONFIG = CONFIG;
+window.initFirebase = initFirebase;
 window.getCurrentUser = getCurrentUser;
-window.saveCurrentUser = saveCurrentUser;
-window.getAllChats = getAllChats;
-window.saveAllChats = saveAllChats;
-window.getChatKey = getChatKey;
+window.setCurrentUser = setCurrentUser;
+window.isOwner = isOwner;
+window.checkAuth = checkAuth;
+window.logout = logout;
+window.setOnline = setOnline;
+window.getChatId = getChatId;
+window.createPrivateChat = createPrivateChat;
+window.createGroup = createGroup;
+window.sendMessage = sendMessage;
+window.markAsRead = markAsRead;
+window.broadcastMessage = broadcastMessage;
 window.genId = genId;
-window.genTitle = genTitle;
+window.formatTime = formatTime;
+window.formatDate = formatDate;
 window.escapeHtml = escapeHtml;
-window.formatMessage = formatMessage;
-window.askAI = askAI;
+window.setTyping = setTyping;
+window.listenTyping = listenTyping;
+window.db = () => db;
