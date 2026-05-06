@@ -8,70 +8,79 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="header">
-        <button class="menu-btn" onclick="toggleDrawer()">☰</button>
-        <div class="logo">
-            <div class="logo-icon">🤖</div>
-            <div class="logo-text">
-                <h1>Rafi AI</h1>
-                <p id="headerStatus">Siap membantu</p>
-            </div>
-        </div>
-        <button class="new-chat-btn" onclick="newChat()">+</button>
-    </div>
+    <!-- Mobile Overlay -->
+    <div class="sidebar-overlay" id="overlay" onclick="closeSidebar()"></div>
 
-    <div class="drawer-overlay" id="overlay" onclick="toggleDrawer()"></div>
-
-    <div class="drawer" id="drawer">
-        <div class="drawer-header">
-            <div class="logo">
-                <div class="logo-icon">🤖</div>
-                <div class="logo-text">
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="sidebar-logo">
+                <div class="icon">🤖</div>
+                <div>
                     <h1>Rafi AI</h1>
                     <p>AI Chat Assistant</p>
                 </div>
             </div>
-            <button class="drawer-new-chat" onclick="newChat(); toggleDrawer()">
+            <button class="btn-new" onclick="createNewChat()">
                 <span>+</span> Chat Baru
             </button>
         </div>
-        <div class="drawer-body">
-            <p class="drawer-section">Riwayat Chat</p>
+        <div class="sidebar-body">
+            <p class="sidebar-label">Riwayat Chat</p>
             <div id="chatList">
-                <div class="empty">Belum ada chat. Mulai chat baru!</div>
+                <div class="empty-text">Belum ada chat. Mulai chat baru!</div>
             </div>
         </div>
-        <div class="user-profile">
+        <div class="user-box">
             <div class="user-avatar">👤</div>
             <div class="user-info">
-                <div class="user-name" id="userName">User</div>
-                <div class="user-email" id="userEmail">-</div>
+                <div class="user-name" id="displayName">User</div>
+                <div class="user-email" id="displayEmail">-</div>
             </div>
-            <button class="logout-btn" onclick="logout()">Logout</button>
+            <button class="btn-logout" onclick="doLogout()">Logout</button>
         </div>
     </div>
 
+    <!-- Main Content -->
     <div class="main">
-        <div class="chat-area" id="chatArea">
-            <div class="message ai" style="align-self:center; text-align:center; margin-top:auto; margin-bottom:auto;">
-                <div class="bubble">
-                    <p>👋 Halo! Aku <strong>Rafi AI</strong></p>
-                    <p style="margin-top:8px;">Bisa bikin kode, ngobrol, atau bantu solve problem.</p>
-                    <p style="margin-top:8px; color:var(--muted); font-size:12px;">Ketik pesan di bawah untuk mulai!</p>
+        <!-- Mobile Header -->
+        <div class="mobile-header">
+            <button class="mobile-menu-btn" onclick="openSidebar()">☰</button>
+            <div class="mobile-title">Rafi AI</div>
+            <button class="mobile-new-btn" onclick="createNewChat()">+</button>
+        </div>
+
+        <!-- Messages -->
+        <div class="chat-messages" id="chatArea">
+            <div class="msg ai welcome-msg">
+                <div class="msg-avatar">🤖</div>
+                <div>
+                    <div class="msg-bubble">
+                        <h3>👋 Halo! Aku Rafi AI</h3>
+                        <p>Bisa bikin kode, ngobrol, atau bantu solve problem.</p>
+                        <p style="margin-top:8px; color:var(--muted);">Ketik pesan di bawah untuk mulai!</p>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="typing hidden" id="typing">
-            <div class="avatar">🤖</div>
+
+        <!-- Typing -->
+        <div class="typing-box hidden" id="typingBox">
+            <div class="msg-avatar">🤖</div>
             <div class="typing-bubble">
                 <span></span><span></span><span></span>
             </div>
         </div>
-        <div class="input-area">
+
+        <!-- Input -->
+        <div class="input-wrap">
             <div class="input-box">
                 <textarea id="msgInput" rows="1" placeholder="Ketik pesan..."></textarea>
-                <button class="send-btn" id="sendBtn" onclick="send()" disabled>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22,2 15,22 11,13 2,9 22,2"></polygon></svg>
+                <button class="btn-send" id="sendBtn" onclick="sendMessage()" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22,2 15,22 11,13 2,9 22,2"></polygon>
+                    </svg>
                 </button>
             </div>
         </div>
@@ -79,169 +88,223 @@
 
     <script src="app.js"></script>
     <script>
-        // Check login
-        const currentUser = JSON.parse(localStorage.getItem('rafi_current_user') || 'null');
+        // ===== CHECK LOGIN =====
+        const currentUser = getCurrentUser();
         if (!currentUser) {
             window.location.href = 'login.html';
+        } else {
+            document.getElementById('displayName').textContent = currentUser.username;
+            document.getElementById('displayEmail').textContent = currentUser.email;
         }
 
-        document.getElementById('userName').textContent = currentUser?.username || 'User';
-        document.getElementById('userEmail').textContent = currentUser?.email || '-';
+        // ===== STATE =====
+        let chats = [];
+        let activeChat = null;
+        let isLoading = false;
 
-        let chats = [], activeChat = null, isLoading = false;
         const chatArea = document.getElementById('chatArea');
         const chatList = document.getElementById('chatList');
-        const typing = document.getElementById('typing');
+        const typingBox = document.getElementById('typingBox');
         const input = document.getElementById('msgInput');
         const sendBtn = document.getElementById('sendBtn');
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('overlay');
 
-        input.addEventListener('input', () => {
-            sendBtn.disabled = !input.value.trim();
-            input.style.height = 'auto';
-            input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+        // ===== EVENTS =====
+        input.addEventListener('input', function() {
+            sendBtn.disabled = !this.value.trim();
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         });
 
-        input.addEventListener('keydown', e => {
+        input.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                send();
+                sendMessage();
             }
         });
 
-        function toggleDrawer() {
-            document.getElementById('overlay').classList.toggle('open');
-            document.getElementById('drawer').classList.toggle('open');
+        // ===== SIDEBAR =====
+        function openSidebar() {
+            sidebar.classList.add('open');
+            overlay.classList.add('open');
         }
 
-        function logout() {
-            localStorage.removeItem('rafi_current_user');
-            window.location.href = 'login.html';
+        function closeSidebar() {
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
         }
 
-        function newChat() {
-            const chat = { id: genId(), title: 'Chat Baru', messages: [], time: new Date(), userId: currentUser?.id };
+        // ===== CHAT FUNCTIONS =====
+        function createNewChat() {
+            const chat = {
+                id: genId(),
+                title: 'Chat Baru',
+                messages: [],
+                time: new Date().toISOString()
+            };
             chats.unshift(chat);
             activeChat = chat.id;
-            save();
-            renderList();
-            chatArea.innerHTML = `
-                <div class="message ai" style="align-self:center; text-align:center; margin-top:auto; margin-bottom:auto;">
-                    <div class="bubble">
-                        <p>👋 Chat baru!</p>
-                        <p style="margin-top:8px;">Ketik pesan untuk mulai ngobrol.</p>
-                    </div>
-                </div>
-            `;
+            saveAllChats(chats);
+            renderChatList();
+            renderWelcome();
             input.focus();
+            closeSidebar();
         }
 
         function selectChat(id) {
             activeChat = id;
-            renderList();
+            renderChatList();
             renderMessages();
-            if (window.innerWidth < 769) toggleDrawer();
+            closeSidebar();
         }
 
-        function delChat(id) {
+        function deleteChat(id) {
             chats = chats.filter(c => c.id !== id);
-            if (activeChat === id) activeChat = chats[0]?.id || null;
-            save(); renderList();
+            if (activeChat === id) {
+                activeChat = chats.length > 0 ? chats[0].id : null;
+            }
+            saveAllChats(chats);
+            renderChatList();
             if (!activeChat) {
-                chatArea.innerHTML = `
-                    <div class="message ai" style="align-self:center; text-align:center; margin-top:auto; margin-bottom:auto;">
-                        <div class="bubble">
-                            <p>👋 Halo! Aku <strong>Rafi AI</strong></p>
-                            <p style="margin-top:8px;">Bisa bikin kode, ngobrol, atau bantu solve problem.</p>
-                        </div>
-                    </div>
-                `;
+                renderWelcome();
             }
         }
 
-        function renderList() {
+        function renderChatList() {
             if (!chats.length) {
-                chatList.innerHTML = '<div class="empty">Belum ada chat. Mulai chat baru!</div>';
+                chatList.innerHTML = '<div class="empty-text">Belum ada chat. Mulai chat baru!</div>';
                 return;
             }
             chatList.innerHTML = chats.map(c => `
-                <div class="chat-item ${c.id===activeChat?'active':''}" onclick="selectChat('${c.id}')">
+                <div class="chat-list-item ${c.id === activeChat ? 'active' : ''}" onclick="selectChat('${c.id}')">
                     <span>💬</span>
-                    <span class="title">${esc(c.title)}</span>
-                    <button class="delete" onclick="event.stopPropagation();delChat('${c.id}')">🗑️</button>
+                    <span class="title">${escapeHtml(c.title)}</span>
+                    <button class="delete" onclick="event.stopPropagation(); deleteChat('${c.id}')">🗑️</button>
                 </div>
             `).join('');
+        }
+
+        function renderWelcome() {
+            chatArea.innerHTML = `
+                <div class="msg ai welcome-msg">
+                    <div class="msg-avatar">🤖</div>
+                    <div>
+                        <div class="msg-bubble">
+                            <h3>👋 Chat Baru!</h3>
+                            <p>Siap membantu. Ketik pesan untuk mulai ngobrol.</p>
+                        </div>
+                    </div>
+                </div>
+            `;
         }
 
         function renderMessages() {
             const chat = chats.find(c => c.id === activeChat);
-            if (!chat || !chat.messages.length) return;
+            if (!chat || !chat.messages.length) {
+                renderWelcome();
+                return;
+            }
             chatArea.innerHTML = chat.messages.map(m => `
-                <div class="message ${m.role}">
-                    <div class="avatar">${m.role==='user'?'👤':'🤖'}</div>
+                <div class="msg ${m.role}">
+                    <div class="msg-avatar">${m.role === 'user' ? '👤' : '🤖'}</div>
                     <div>
-                        <div class="bubble">${fmt(m.content)}</div>
-                        <div class="time">${new Date(m.time).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'})}</div>
+                        <div class="msg-bubble">${formatMessage(m.content)}</div>
+                        <div class="msg-time">${new Date(m.time).toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}</div>
                     </div>
                 </div>
             `).join('');
+            scrollToBottom();
+        }
+
+        function scrollToBottom() {
             chatArea.scrollTop = chatArea.scrollHeight;
         }
 
-        function getStorageKey() {
-            return 'rafi_chats_' + (currentUser?.id || 'guest');
-        }
-
-        function save() {
-            localStorage.setItem(getStorageKey(), JSON.stringify(chats));
-        }
-
-        function load() {
-            const s = localStorage.getItem(getStorageKey());
-            if (s) { chats = JSON.parse(s); renderList(); }
-        }
-
-        async function send() {
+        // ===== SEND MESSAGE =====
+        async function sendMessage() {
             const text = input.value.trim();
             if (!text || isLoading) return;
-            if (!activeChat) newChat();
+
+            if (!activeChat) {
+                createNewChat();
+            }
+
             const chat = chats.find(c => c.id === activeChat);
+            if (!chat) return;
 
-            const umsg = { id: genId(), role: 'user', content: text, time: new Date() };
-            chat.messages.push(umsg);
-            chat.title = chat.title==='Chat Baru' ? genTitle(text) : chat.title;
-            input.value = ''; input.style.height = 'auto'; sendBtn.disabled = true;
-            save(); renderList(); renderMessages();
+            // Add user message
+            const userMsg = {
+                id: genId(),
+                role: 'user',
+                content: text,
+                time: new Date().toISOString()
+            };
+            chat.messages.push(userMsg);
+            chat.title = chat.title === 'Chat Baru' ? genTitle(text) : chat.title;
 
-            isLoading = true; typing.classList.remove('hidden'); chatArea.scrollTop = chatArea.scrollHeight;
+            // Clear input
+            input.value = '';
+            input.style.height = 'auto';
+            sendBtn.disabled = true;
+
+            // Save & render
+            saveAllChats(chats);
+            renderChatList();
+            renderMessages();
+
+            // Show typing
+            isLoading = true;
+            typingBox.classList.remove('hidden');
+            scrollToBottom();
 
             try {
-                const res = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        model: 'llama-3.3-70b-versatile',
-                        messages: [
-                            { role: 'system', content: 'Kamu adalah AI Chat Assistant bernama "Rafi AI". Kamu pintar, ramah, dan profesional. Kemampuan: 1. Ngobrol & Chat - Bisa diajak ngobrol santai, diskusi, tanya jawab 2. Coding & Programming - Bikin kode JS, Python, PHP, React, dll. Kode harus clean dan well-commented 3. Problem Solving - Bantu debug error, jelaskan konsep. Rules: - Jawab dalam Bahasa Indonesia kecuali diminta bahasa lain - Untuk kode, pakai markdown code block - Jelaskan kode dengan detail - Selalu ramah dan helpful' },
-                            ...chat.messages.map(m => ({ role: m.role==='ai'?'assistant':m.role, content: m.content }))
-                        ],
-                        temperature: 0.7, max_tokens: 4096
-                    })
-                });
-                if (!res.ok) throw new Error('Gagal response AI');
-                const data = await res.json();
-                const reply = data.choices?.[0]?.message?.content || 'Maaf, saya tidak bisa memproses.';
-                chat.messages.push({ id: genId(), role: 'ai', content: reply, time: new Date() });
-                save();
+                const reply = await askAI(chat.messages);
+
+                const aiMsg = {
+                    id: genId(),
+                    role: 'ai',
+                    content: reply,
+                    time: new Date().toISOString()
+                };
+                chat.messages.push(aiMsg);
+                saveAllChats(chats);
+
             } catch(err) {
-                chat.messages.push({ id: genId(), role: 'ai', content: `❌ Error: ${err.message}\n\nCoba lagi nanti.`, time: new Date() });
-                save();
+                console.error('AI Error:', err);
+                chat.messages.push({
+                    id: genId(),
+                    role: 'ai',
+                    content: '❌ Error: ' + err.message + '\n\nCoba lagi nanti.',
+                    time: new Date().toISOString()
+                });
+                saveAllChats(chats);
             } finally {
-                isLoading = false; typing.classList.add('hidden'); renderMessages();
+                isLoading = false;
+                typingBox.classList.add('hidden');
+                renderMessages();
             }
         }
 
-        load();
-        if (!chats.length) newChat();
+        // ===== LOGOUT =====
+        function doLogout() {
+            localStorage.removeItem('rafi_current_user');
+            window.location.href = 'login.html';
+        }
+
+        // ===== INIT =====
+        function init() {
+            chats = getAllChats();
+            renderChatList();
+            if (!chats.length) {
+                createNewChat();
+            } else {
+                activeChat = chats[0].id;
+                renderMessages();
+            }
+        }
+
+        init();
     </script>
 </body>
 </html>

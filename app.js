@@ -1,14 +1,18 @@
 // =====================
-// Rafi AI - Shared Functions
+// Rafi AI - Core Functions
 // =====================
 
 const GROQ_API_KEY = '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';
 const API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
-// User Management
+// USER FUNCTIONS
 function getUsers() {
-    const data = localStorage.getItem('rafi_users');
-    return data ? JSON.parse(data) : [];
+    try {
+        const data = localStorage.getItem('rafi_users');
+        return data ? JSON.parse(data) : [];
+    } catch(e) {
+        return [];
+    }
 }
 
 function saveUsers(users) {
@@ -16,70 +20,115 @@ function saveUsers(users) {
 }
 
 function getCurrentUser() {
-    return JSON.parse(localStorage.getItem('rafi_current_user') || 'null');
+    try {
+        const data = localStorage.getItem('rafi_current_user');
+        return data ? JSON.parse(data) : null;
+    } catch(e) {
+        return null;
+    }
 }
 
-function setCurrentUser(user) {
+function saveCurrentUser(user) {
     localStorage.setItem('rafi_current_user', JSON.stringify(user));
 }
 
-function logout() {
-    localStorage.removeItem('rafi_current_user');
-    window.location.href = 'login.html';
-}
-
-// Chat Management
-function getStorageKey() {
+// CHAT FUNCTIONS
+function getChatKey() {
     const user = getCurrentUser();
-    return 'rafi_chats_' + (user?.id || 'guest');
+    return 'rafi_chats_' + (user ? user.id : 'guest');
 }
 
-function getChats() {
-    const data = localStorage.getItem(getStorageKey());
-    return data ? JSON.parse(data) : [];
+function getAllChats() {
+    try {
+        const data = localStorage.getItem(getChatKey());
+        return data ? JSON.parse(data) : [];
+    } catch(e) {
+        return [];
+    }
 }
 
-function saveChats(chats) {
-    localStorage.setItem(getStorageKey(), JSON.stringify(chats));
+function saveAllChats(chats) {
+    localStorage.setItem(getChatKey(), JSON.stringify(chats));
 }
 
-// Utilities
+// UTILITIES
 function genId() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    return Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
 }
 
 function genTitle(text) {
-    return text.replace(/[#*`]/g, '').trim().slice(0, 30) || 'Chat Baru';
+    const clean = text.replace(/[#*`]/g, '').trim();
+    return clean.length > 25 ? clean.substring(0, 25) + '...' : clean || 'Chat Baru';
 }
 
-function esc(t) {
-    const d = document.createElement('div');
-    d.textContent = t;
-    return d.innerHTML;
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
-function fmt(c) {
-    let h = esc(c);
-    h = h.replace(/```(\w+)?\n([\s\S]*?)```/g, (_, l, code) => `<pre><code>${code.trim()}</code></pre>`);
-    h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
-    h = h.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    h = h.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    h = h.replace(/\n/g, '<br>');
-    return h;
+function formatMessage(content) {
+    let html = escapeHtml(content);
+    // Code blocks
+    html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+        return '<pre><code>' + code.trim() + '</code></pre>';
+    });
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Bold
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    // Line breaks
+    html = html.replace(/\n/g, '<br>');
+    return html;
 }
 
-// Export for global access
+// AI API
+async function askAI(messages) {
+    const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+            'Authorization': 'Bearer ' + GROQ_API_KEY,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'Kamu adalah AI Chat Assistant bernama "Rafi AI". Kamu pintar, ramah, dan profesional.\n\nKemampuan:\n1. Ngobrol & Chat - Bisa diajak ngobrol santai, diskusi, tanya jawab\n2. Coding & Programming - Bikin kode JS, Python, PHP, React, dll. Kode harus clean dan well-commented\n3. Problem Solving - Bantu debug error, jelaskan konsep\n\nRules:\n- Jawab dalam Bahasa Indonesia kecuali diminta bahasa lain\n- Untuk kode, pakai markdown code block\n- Jelaskan kode dengan detail\n- Selalu ramah dan helpful'
+                },
+                ...messages.map(m => ({
+                    role: m.role === 'ai' ? 'assistant' : m.role,
+                    content: m.content
+                }))
+            ],
+            temperature: 0.7,
+            max_tokens: 4096
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error('Gagal response dari AI');
+    }
+
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || 'Maaf, saya tidak bisa memproses.';
+}
+
+// Export semua fungsi ke window biar bisa dipake di HTML
 window.GROQ_API_KEY = GROQ_API_KEY;
 window.API_URL = API_URL;
 window.getUsers = getUsers;
 window.saveUsers = saveUsers;
 window.getCurrentUser = getCurrentUser;
-window.setCurrentUser = setCurrentUser;
-window.logout = logout;
-window.getStorageKey = getStorageKey;
-window.getChats = getChats;
-window.saveChats = saveChats;
+window.saveCurrentUser = saveCurrentUser;
+window.getAllChats = getAllChats;
+window.saveAllChats = saveAllChats;
+window.getChatKey = getChatKey;
 window.genId = genId;
 window.genTitle = genTitle;
-window.esc = esc;
-window.fmt = fmt;
+window.escapeHtml = escapeHtml;
+window.formatMessage = formatMessage;
+window.askAI = askAI;

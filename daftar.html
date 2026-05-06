@@ -7,17 +7,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
-    <div class="container">
-        <div class="logo">
-            <div class="logo-icon">🤖</div>
+<body class="auth-page">
+    <div class="auth-box">
+        <div class="auth-logo">
+            <div class="icon">🤖</div>
             <h1>Rafi AI</h1>
             <p>Daftar akun baru</p>
         </div>
-        <div class="card">
+        <div class="auth-card">
             <h2>Buat Akun</h2>
-            <div class="error" id="error"></div>
-            <div class="success" id="success"></div>
+            <div class="alert" id="errorBox"></div>
+            <div class="alert" id="successBox"></div>
             <div class="form-group">
                 <label>Username</label>
                 <input type="text" id="username" placeholder="Masukkan username" autocomplete="off">
@@ -28,14 +28,14 @@
             </div>
             <div class="form-group">
                 <label>Password</label>
-                <input type="password" id="password" placeholder="Masukkan password">
+                <input type="password" id="password" placeholder="Minimal 6 karakter">
             </div>
             <div class="form-group">
                 <label>Konfirmasi Password</label>
                 <input type="password" id="confirmPassword" placeholder="Ulangi password">
             </div>
-            <button class="btn" onclick="daftar()">Daftar</button>
-            <div class="link">
+            <button class="btn-primary" onclick="doRegister()">Daftar</button>
+            <div class="auth-link">
                 Sudah punya akun? <a href="login.html">Login</a>
             </div>
         </div>
@@ -43,48 +43,36 @@
 
     <script src="app.js"></script>
     <script>
-        function daftar() {
+        function doRegister() {
             const username = document.getElementById('username').value.trim();
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
             const confirmPassword = document.getElementById('confirmPassword').value;
-            const error = document.getElementById('error');
-            const success = document.getElementById('success');
 
             if (!username || !email || !password) {
-                error.textContent = 'Semua field harus diisi!';
-                error.style.display = 'block';
-                success.style.display = 'none';
+                showError('Semua field harus diisi!');
                 return;
             }
 
             if (password !== confirmPassword) {
-                error.textContent = 'Password tidak cocok!';
-                error.style.display = 'block';
-                success.style.display = 'none';
+                showError('Password tidak cocok!');
                 return;
             }
 
             if (password.length < 6) {
-                error.textContent = 'Password minimal 6 karakter!';
-                error.style.display = 'block';
-                success.style.display = 'none';
+                showError('Password minimal 6 karakter!');
                 return;
             }
 
             const users = getUsers();
 
             if (users.find(u => u.username === username)) {
-                error.textContent = 'Username sudah digunakan!';
-                error.style.display = 'block';
-                success.style.display = 'none';
+                showError('Username sudah digunakan!');
                 return;
             }
 
             if (users.find(u => u.email === email)) {
-                error.textContent = 'Email sudah terdaftar!';
-                error.style.display = 'block';
-                success.style.display = 'none';
+                showError('Email sudah terdaftar!');
                 return;
             }
 
@@ -99,13 +87,24 @@
             users.push(newUser);
             saveUsers(users);
 
-            error.style.display = 'none';
-            success.textContent = 'Akun berhasil dibuat! Redirecting...';
-            success.style.display = 'block';
-
+            showSuccess('Akun berhasil dibuat! Redirecting...');
             setTimeout(() => {
                 window.location.href = 'login.html';
             }, 1500);
+        }
+
+        function showError(msg) {
+            const box = document.getElementById('errorBox');
+            box.textContent = msg;
+            box.className = 'alert alert-error';
+            document.getElementById('successBox').style.display = 'none';
+        }
+
+        function showSuccess(msg) {
+            const box = document.getElementById('successBox');
+            box.textContent = msg;
+            box.className = 'alert alert-success';
+            document.getElementById('errorBox').style.display = 'none';
         }
     </script>
 </body>
