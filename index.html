@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chat by Rafi</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon">✨</div>
+                    <div>
+                        <h1>Rafi AI</h1>
+                        <p>AI Chat Assistant</p>
+                    </div>
+                </div>
+                <button class="btn-new-chat" onclick="newChat()">
+                    <span>+</span> Chat Baru
+                </button>
+            </div>
+            <div class="sidebar-body">
+                <p class="sidebar-label">Riwayat Chat</p>
+                <div id="chatList" class="chat-list">
+                    <div class="empty-state">
+                        <p>Belum ada chat</p>
+                        <p class="sub">Mulai chat baru!</p>
+                    </div>
+                </div>
+            </div>
+            <div class="sidebar-footer">
+                <p>Powered by Groq AI</p>
+            </div>
+        </aside>
+
+        <main class="main">
+            <div id="welcomeScreen" class="welcome">
+                <div class="welcome-content">
+                    <div class="welcome-icon">🤖</div>
+                    <h2>Selamat Datang di Rafi AI</h2>
+                    <p>Asisten AI pintar yang bisa ngobrol, bikin kode, dan bantu solve problem.</p>
+                    <div class="features">
+                        <div class="feature">
+                            <div class="feature-icon">💻</div>
+                            <h3>Coding</h3>
+                            <p>Bikin kode JS, Python, PHP, React, dll</p>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-icon">💬</div>
+                            <h3>Chat</h3>
+                            <p>Ngobrol santai, diskusi, tanya jawab</p>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-icon">⚡</div>
+                            <h3>Fast</h3>
+                            <p>Response cepat pakai Groq API</p>
+                        </div>
+                        <div class="feature">
+                            <div class="feature-icon">🎨</div>
+                            <h3>Modern UI</h3>
+                            <p>Tampilan dark theme yang nyaman</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="chatContainer" class="chat-container hidden">
+                <div id="messages" class="messages"></div>
+                <div id="typingIndicator" class="typing hidden">
+                    <div class="typing-avatar">🤖</div>
+                    <div class="typing-bubble">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <textarea id="messageInput" placeholder="Ketik pesanmu di sini... (Shift+Enter untuk baris baru)" rows="1"></textarea>
+                    <button id="sendBtn" onclick="sendMessage()" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                        </svg>
+                    </button>
+                </div>
+                <p class="input-hint">Rafi AI bisa bikin kode, ngobrol, dan bantu solve problem. Tekan Enter untuk kirim.</p>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
